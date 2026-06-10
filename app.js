@@ -7,6 +7,13 @@ let taryfikatorData = [];
 let currentUser = null; 
 let isSheriff = false;
 
+// Pomocnicza funkcja do pobierania podpisu wystawiającego
+function getOfficerSignature() {
+    if (!currentUser) return "Nieznany funkcjonariusz";
+    const badge = currentUser.numer_odznaki ? `[${currentUser.numer_odznaki}] ` : "";
+    return `${badge}${currentUser.imie_nazwisko_ic}`;
+}
+
 // ============================================
 // LOGOWANIE I REJESTRACJA
 // ============================================
@@ -183,8 +190,10 @@ async function fetchNotes() {
         document.getElementById('notes-list').innerHTML = data.map(n => `
             <div class="card">
                 <p style="white-space: pre-wrap;">${n.tresc}</p>
-                <small style="color:#888;">${new Date(n.stworzono_at).toLocaleString('pl-PL')}</small>
-                <p><button class="delete-btn" onclick="deleteNote('${n.id}')">Usuń notatkę</button></p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <small style="color:#888;">Wystawił: <strong style="color: #45f3ff;">${n.wystawil || 'Brak danych'}</strong> | ${new Date(n.stworzono_at).toLocaleString('pl-PL')}</small>
+                    <button class="delete-btn" onclick="deleteNote('${n.id}')">Usuń notatkę</button>
+                </div>
             </div>
         `).join('');
     }
@@ -192,7 +201,8 @@ async function fetchNotes() {
 async function addNote() {
     const text = document.getElementById('note-text').value;
     if (!text) return;
-    const { error } = await supabaseClient.from('notatki_funkcjonariuszy').insert([{ tresc: text }]);
+    const signature = getOfficerSignature();
+    const { error } = await supabaseClient.from('notatki_funkcjonariuszy').insert([{ tresc: text, wystawil: signature }]);
     if (!error) { document.getElementById('note-text').value = ''; fetchNotes(); }
 }
 async function deleteNote(id) {
@@ -210,7 +220,7 @@ async function fetchTickets() {
                 <h3 style="margin-top:0; color:#45f3ff;">Obywatel: ${t.obywatel}</h3>
                 <p><strong>Zarzuty:</strong> ${t.powod}</p>
                 <p><strong>Kara:</strong> <span style="color:#28a745;">$${t.grzywna.toLocaleString()}</span> | <strong>Więzienie:</strong> ${t.wiezienie} m-cy</p>
-                <small style="color:#888;">Wystawiono: ${new Date(t.stworzono_at).toLocaleString('pl-PL')}</small>
+                <small style="color:#888;">Wystawił: <strong style="color: #45f3ff;">${t.wystawil || 'Brak danych'}</strong> | Wystawiono: ${new Date(t.stworzono_at).toLocaleString('pl-PL')}</small>
             </div>
         `).join('');
     }
@@ -222,7 +232,8 @@ async function addTicket() {
     const jail = document.getElementById('ticket-jail').value || 0;
 
     if (!citizen || !reason) return alert('Wypełnij imię i powód!');
-    const { error } = await supabaseClient.from('mandaty_wystawione').insert([{ obywatel: citizen, powod: reason, grzywna: parseInt(fine), wiezienie: parseInt(jail) }]);
+    const signature = getOfficerSignature();
+    const { error } = await supabaseClient.from('mandaty_wystawione').insert([{ obywatel: citizen, powod: reason, grzywna: parseInt(fine), wiezienie: parseInt(jail), wystawil: signature }]);
     if (!error) {
         document.getElementById('ticket-citizen').value = ''; document.getElementById('ticket-reason').value = '';
         document.getElementById('ticket-fine').value = ''; document.getElementById('ticket-jail').value = '';
@@ -271,7 +282,7 @@ async function fetchBolos() {
                     </div>
                     
                     ${imagesHtml}
-                    <br><small style="color:#888;">Zgłoszono: ${new Date(b.stworzono_at).toLocaleString('pl-PL')}</small>
+                    <br><small style="color:#888;">Wystawił: <strong style="color: #45f3ff;">${b.wystawil || 'Brak danych'}</strong> | Zgłoszono: ${new Date(b.stworzono_at).toLocaleString('pl-PL')}</small>
                     
                     <div style="margin-top: 15px;">
                         <button class="action-btn" style="width: auto; padding: 8px 15px;" onclick="openFullscreen(this.parentElement.parentElement.innerHTML)">🔍 Powiększ na cały ekran</button>
@@ -302,9 +313,10 @@ async function addBolo() {
         }
     }
 
+    const signature = getOfficerSignature();
     // Wysyłamy 'opis' jako nasz kod HTML
     const { error } = await supabaseClient.from('poszukiwania').insert([{
-        tytul: title, opis: descHTML, zdjecia: zdjeciaArray
+        tytul: title, opis: descHTML, zdjecia: zdjeciaArray, wystawil: signature
     }]);
 
     if (!error) {
