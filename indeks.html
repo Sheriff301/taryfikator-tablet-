@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MDT - LSPD / BCSO</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0b0c10; color: #e0e0e0; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Ekran logowania */
+        #login-screen { display: flex; width: 100%; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #0b0c10; }
+        .auth-box { background: #1f2833; padding: 40px; border-radius: 8px; border: 2px solid #45f3ff; width: 350px; box-shadow: 0 4px 15px rgba(69, 243, 255, 0.2); }
+        .auth-box h2 { text-align: center; margin-top: 0; color: #45f3ff; }
+        
+        /* Układ główny z zakładkami po prawej */
+        #mdt-app { display: none; width: 100%; height: 100%; flex-direction: row; }
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; box-sizing: border-box; background: #0f1115; }
+        .sidebar-right { width: 280px; background: #1f2833; border-left: 2px solid #45f3ff; display: flex; flex-direction: column; padding: 20px 15px; gap: 10px; }
+        
+        /* Informacja o zalogowanym */
+        .logged-info { background: #0b0c10; border: 1px solid #45f3ff; padding: 10px; border-radius: 6px; text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 15px; color: #45f3ff; }
+
+        /* Style przycisków zakładek */
+        .tab-btn { background: #0b0c10; color: #fff; border: 1px solid #444; padding: 15px; border-radius: 6px; cursor: pointer; text-align: left; font-size: 15px; transition: 0.2s; }
+        .tab-btn:hover { background: #333; border-color: #45f3ff; }
+        .tab-btn.active { background: #45f3ff; color: #000; border-color: #45f3ff; font-weight: bold; }
+        
+        /* Kontenery podstron */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Formularze i elementy wspólne */
+        input, textarea, button { width: 100%; padding: 10px; margin-top: 8px; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; font-family: sans-serif; }
+        button.action-btn { background: #45f3ff; color: #000; border: none; cursor: pointer; font-weight: bold; margin-bottom: 15px; transition: 0.3s; }
+        button.action-btn:hover { background: #33c2cc; }
+        button.delete-btn { background: #cc2424; color: #fff; border: none; width: auto; padding: 8px 15px; cursor: pointer; font-weight: bold; border-radius: 4px; }
+        
+        /* Karty wpisów */
+        .card { background: #1f2833; border: 1px solid #333; padding: 20px; margin-bottom: 15px; border-radius: 6px; }
+        
+        /* Taryfikator i podsumowanie */
+        .item { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid #333; background: #1a1a1a; margin-bottom: 5px; border-radius: 4px; }
+        .summary { margin-top: 20px; padding: 15px; background: #0b0c10; border: 1px solid #45f3ff; border-radius: 6px; }
+
+        /* Galeria BOLO */
+        .image-gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .gallery-img { max-width: 150px; max-height: 150px; border-radius: 4px; object-fit: cover; border: 1px solid #555; }
+        .dynamic-img-inputs { margin-bottom: 10px; }
+
+        /* Style Word-Edytora */
+        .word-toolbar { background: #222; padding: 8px; border: 1px solid #444; border-bottom: none; display: flex; gap: 5px; flex-wrap: wrap; border-radius: 5px 5px 0 0; margin-top: 8px; }
+        .word-toolbar button, .word-toolbar select { width: auto; background: #333; color: white; border: 1px solid #555; padding: 6px 10px; margin: 0; cursor: pointer; font-weight: bold; border-radius: 3px; }
+        .word-toolbar button:hover { background: #45f3ff; color: black; }
+        .word-editor { min-height: 150px; background: #1a1a1a; color: white; border: 1px solid #444; padding: 15px; overflow-y: auto; border-radius: 0 0 5px 5px; margin-bottom: 15px; font-family: Arial, sans-serif; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="auth-box">
+            <h2>MDT - Dostęp Służbowy</h2>
+            <input type="text" id="auth-discord" placeholder="Twój nick z Discorda">
+            <input type="text" id="auth-ic" placeholder="Imię i Nazwisko IC (Rejestracja)">
+            
+            <button class="action-btn" onclick="loginOfficer()" style="margin-top: 15px;">Zaloguj do MDT</button>
+            <button class="action-btn" onclick="registerOfficer()" style="background: #28a745; color: #fff;">Wyślij wniosek o dostęp</button>
+            
+            <hr style="border-color: #333; margin: 20px 0;">
+            <button class="action-btn" onclick="loginSheriff()" style="background: #ffcc00; color: #000; margin-bottom: 0;">Zaloguj jako Dowództwo</button>
+        </div>
+    </div>
+
+    <div id="mdt-app">
+        <div class="main-content">
+            
+            <div id="tab-taryfikator" class="tab-content active">
+                <h1 style="color: #45f3ff;">Taryfikator Wykroczeń</h1>
+                <div id="taryfikator-list">Ładowanie taryfikatora...</div>
+                <div class="summary">
+                    <h3 style="margin-top: 0; color: #45f3ff;">Podsumowanie Zatrzymania:</h3>
+                    <p>Łączna grzywna: <strong style="color:#28a745;">$<span id="total-fine">0</span></strong></p>
+                    <p>Wyrok więzienia: <strong><span id="total-jail">0</span></strong> miesięcy</p>
+                    <p>Sugerowane działania: <br><em id="total-actions" style="color:#ffcc00;">Brak</em></p>
+                </div>
+            </div>
+
+            <div id="tab-notatki" class="tab-content">
+                <h1 style="color: #45f3ff;">Notatki Funkcjonariuszy</h1>
+                <div class="card">
+                    <h3>Dodaj nową notatkę</h3>
+                    <textarea id="note-text" rows="3" placeholder="Wpisz treść notatki służbowej..."></textarea>
+                    <button class="action-btn" onclick="addNote()">Zapisz notatkę</button>
+                </div>
+                <div id="notes-list">Ładowanie notatek...</div>
+            </div>
+
+            <div id="tab-mandaty" class="tab-content">
+                <h1 style="color: #45f3ff;">Wystawione Mandaty i Wyroki</h1>
+                <div class="card">
+                    <h3>Zarejestruj nowy wpis w kartotece</h3>
+                    <input type="text" id="ticket-citizen" placeholder="Imię i Nazwisko obywatela">
+                    <input type="text" id="ticket-reason" placeholder="Powód / złamane paragrafy">
+                    <input type="number" id="ticket-fine" placeholder="Kwota grzywny ($)">
+                    <input type="number" id="ticket-jail" placeholder="Wyrok (miesiące)">
+                    <button class="action-btn" onclick="addTicket()">Wystaw mandat / wyrok</button>
+                </div>
+                <div id="tickets-list">Ładowanie historii kartoteki...</div>
+            </div>
+
+            <div id="tab-poszukiwania" class="tab-content">
+                <h1 style="color: #45f3ff;">Listy Gończe i Poszukiwania (BOLO)</h1>
+                <div class="card" style="border-left: 4px solid #cc2424;">
+                    <h3>Dodaj nowy wpis o poszukiwanym</h3>
+                    
+                    <input type="text" id="bolo-title" placeholder="Tytuł (np. Poszukiwany Jan Kowalski / Czarny Sultan)">
+                    
+                    <div class="word-toolbar">
+                        <button type="button" onclick="formatuj('bold')">B</button>
+                        <button type="button" onclick="formatuj('italic')">I</button>
+                        <button type="button" onclick="formatuj('underline')">U</button>
+                        <select onchange="formatuj('fontSize', this.value)">
+                            <option value="3">Czcionka: Normalna</option>
+                            <option value="4">Średnia</option>
+                            <option value="5">Duża</option>
+                            <option value="6">Ogromna</option>
+                        </select>
+                        <select onchange="formatuj('foreColor', this.value)">
+                            <option value="#ffffff">Kolor: Biały</option>
+                            <option value="#ff4d4d">Czerwony</option>
+                            <option value="#ffb300">Pomarańczowy</option>
+                            <option value="#4dff4d">Zielony</option>
+                        </select>
+                        <select onchange="formatuj('hiliteColor', this.value)">
+                            <option value="transparent">Brak tła</option>
+                            <option value="#550000">Czerwone tło</option>
+                        </select>
+                        <button type="button" onclick="formatuj('insertUnorderedList')">• Lista</button>
+                    </div>
+                    <div id="bolo-desc-html" class="word-editor" contenteditable="true" placeholder="Opis sprawy, rysopis, formatuj tekst..."></div>
+
+                    <div id="bolo-images-inputs" class="dynamic-img-inputs">
+                        <input type="file" class="bolo-img-file" accept="image/*">
+                    </div>
+                    <button type="button" style="background:#444; width:auto; padding:8px 15px; margin-bottom:15px; border:none; color:white; cursor:pointer;" onclick="addImgInputField()">+ Dodaj kolejne zdjęcie</button>
+                    
+                    <button class="action-btn" onclick="addBolo()">Opublikuj list gończy</button>
+                </div>
+                
+                <div id="bolos-list">Ładowanie listów gończych...</div>
+            </div>
+
+            <div id="tab-szeryf" class="tab-content">
+                <h1 style="color: #ffcc00;">Panel Dowództwa - Oczekujące Wnioski</h1>
+                <div id="pending-list">Ładowanie wniosków...</div>
+            </div>
+
+        </div>
+
+        <div class="sidebar-right">
+            <h2 style="text-align: center; color: #45f3ff; margin-top: 0; margin-bottom: 10px; letter-spacing: 2px;">MDT MENU</h2>
+            <div class="logged-info" id="logged-user-info">Zalogowano jako: Brak</div>
+            
+            <button class="tab-btn active" onclick="switchTab('taryfikator', this)">📋 Taryfikator</button>
+            <button class="tab-btn" onclick="switchTab('notatki', this)">📝 Notatki</button>
+            <button class="tab-btn" onclick="switchTab('mandaty', this)">💵 Mandaty i Wyroki</button>
+            <button class="tab-btn" onclick="switchTab('poszukiwania', this)">🚨 Poszukiwania</button>
+            
+            <button class="tab-btn" id="btn-tab-szeryf" style="display: none; border-color: #ffcc00; color: #ffcc00; margin-top: 20px;" onclick="switchTab('szeryf', this)">⭐ Panel Dowództwa</button>
+        </div>
+    </div>
+
+    <div id="fullscreenModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(10, 12, 16, 0.98); z-index: 9999; padding: 45px; box-sizing: border-box; overflow-y: auto;">
+        <button onclick="closeFullscreen()" style="position: fixed; top: 20px; right: 20px; background: #ff4d4d; color: white; border: none; padding: 15px 30px; font-size: 18px; cursor: pointer; border-radius: 5px; font-weight: bold; box-shadow: 0 0 15px rgba(255, 77, 77, 0.4);">
+            ZAMKNIJ PODGLĄD X
+        </button>
+        <div id="fullscreenContent" style="max-width: 900px; margin: 60px auto; font-size: 20px; line-height: 1.7; background: #1f2833; padding: 40px; border-radius: 10px; border: 2px solid #45f3ff; box-shadow: 0 0 30px rgba(69, 243, 255, 0.2); color: white;">
+            </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
