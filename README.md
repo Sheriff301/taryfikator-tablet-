@@ -1,2 +1,0 @@
-# taryfikator-tablet-
-taryfikator
