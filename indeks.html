@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MDT - LSPD / BCSO</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #e0e0e0; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Ekran logowania */
+        #login-screen { display: flex; width: 100%; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        .auth-box { background: #1e1e1e; padding: 40px; border-radius: 8px; border: 1px solid #333; width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .auth-box h2 { text-align: center; margin-top: 0; color: #007bff; }
+        
+        /* Układ główny z zakładkami po prawej */
+        #mdt-app { display: none; width: 100%; height: 100%; flex-direction: row; }
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; box-sizing: border-box; }
+        .sidebar-right { width: 250px; background: #1a1a1a; border-left: 2px solid #333; display: flex; flex-direction: column; padding: 20px 10px; gap: 10px; }
+        
+        /* Informacja o zalogowanym */
+        .logged-info { background: #004488; padding: 10px; border-radius: 6px; text-align: center; font-size: 13px; font-weight: bold; margin-bottom: 10px; }
+
+        /* Style przycisków zakładek */
+        .tab-btn { background: #262626; color: #fff; border: 1px solid #444; padding: 15px; border-radius: 6px; cursor: pointer; text-align: left; font-size: 15px; transition: 0.2s; }
+        .tab-btn:hover { background: #333; border-color: #007bff; }
+        .tab-btn.active { background: #004488; border-color: #007bff; font-weight: bold; }
+        
+        /* Kontenery podstron */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* Taryfikator i podsumowanie */
+        .item { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-bottom: 1px solid #333; background: #1e1e1e; margin-bottom: 5px; border-radius: 4px; }
+        .summary { margin-top: 20px; padding: 15px; background: #004488; border-radius: 6px; }
+        
+        /* Formularze i elementy wspólne */
+        input, textarea, button { width: 100%; padding: 10px; margin-top: 8px; background: #222; border: 1px solid #444; color: #fff; border-radius: 4px; box-sizing: border-box; }
+        button.action-btn { background: #0066cc; border: none; cursor: pointer; font-weight: bold; margin-bottom: 15px; }
+        button.action-btn:hover { background: #0052a3; }
+        button.delete-btn { background: #cc2424; border: none; width: auto; padding: 5px 10px; cursor: pointer; }
+        
+        /* Karty wpisów */
+        .card { background: #1e1e1e; border: 1px solid #333; padding: 15px; margin-bottom: 15px; border-radius: 6px; position: relative; }
+        .image-gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .gallery-img { max-width: 150px; max-height: 150px; border-radius: 4px; object-fit: cover; border: 1px solid #555; }
+        .dynamic-img-inputs { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="auth-box">
+            <h2>MDT - Dostęp Służbowy</h2>
+            <input type="text" id="auth-discord" placeholder="Twój nick z Discorda">
+            <input type="text" id="auth-ic" placeholder="Imię i Nazwisko IC (Tylko do rejestracji)">
+            
+            <button class="action-btn" onclick="loginOfficer()" style="margin-top: 15px;">Zaloguj do MDT</button>
+            <button class="action-btn" onclick="registerOfficer()" style="background: #28a745;">Wyślij wniosek o dostęp</button>
+            
+            <hr style="border-color: #333; margin: 20px 0;">
+            <button class="action-btn" onclick="loginSheriff()" style="background: #ffcc00; color: #000; margin-bottom: 0;">Zaloguj jako Szeryf</button>
+        </div>
+    </div>
+
+    <div id="mdt-app">
+        <div class="main-content">
+            
+            <div id="tab-taryfikator" class="tab-content active">
+                <h1>Taryfikator Wykroczeń</h1>
+                <div id="taryfikator-list">Ładowanie taryfikatora...</div>
+                <div class="summary">
+                    <h3>Podsumowanie Zatrzymania:</h3>
+                    <p>Łączna grzywna: <strong>$<span id="total-fine">0</span></strong></p>
+                    <p>Wyrok więzienia: <strong><span id="total-jail">0</span></strong> miesięcy</p>
+                    <p>Sugerowane działania: <br><em id="total-actions">Brak</em></p>
+                </div>
+            </div>
+
+            <div id="tab-notatki" class="tab-content">
+                <h1>Notatki Funkcjonariuszy</h1>
+                <div class="card">
+                    <h3>Dodaj nową notatkę</h3>
+                    <textarea id="note-text" rows="3" placeholder="Wpisz treść notatki służbowej..."></textarea>
+                    <button class="action-btn" onclick="addNote()">Zapisz notatkę</button>
+                </div>
+                <div id="notes-list">Ładowanie notatek...</div>
+            </div>
+
+            <div id="tab-mandaty" class="tab-content">
+                <h1>Wystawione Mandaty i Wyroki</h1>
+                <div class="card">
+                    <h3>Zarejestruj nowy wpis w kartotece</h3>
+                    <input type="text" id="ticket-citizen" placeholder="Imię i Nazwisko obywatela">
+                    <input type="text" id="ticket-reason" placeholder="Powód / złamane paragrafy">
+                    <input type="number" id="ticket-fine" placeholder="Kwota grzywny ($)">
+                    <input type="number" id="ticket-jail" placeholder="Wyrok (miesiące)">
+                    <button class="action-btn" onclick="addTicket()">Wystaw mandat / wyrok</button>
+                </div>
+                <div id="tickets-list">Ładowanie historii kartoteki...</div>
+            </div>
+
+            <div id="tab-poszukiwania" class="tab-content">
+                <h1>Listy Gończe i Poszukiwania (BOLO)</h1>
+                <div class="card">
+                    <h3>Dodaj wpis o poszukiwaniu</h3>
+                    <input type="text" id="bolo-title" placeholder="Temat (np. Poszukiwany Jan Kowalski / Czarny Sultan)">
+                    <textarea id="bolo-desc" rows="3" placeholder="Opis sprawy, rysopis, numery rejestracyjne..."></textarea>
+                    <div id="bolo-images-inputs" class="dynamic-img-inputs">
+                        <input type="file" class="bolo-img-file" accept="image/*">
+                    </div>
+                    <button type="button" style="background:#444; margin-bottom:10px;" onclick="addImgInputField()">+ Dodaj kolejne zdjęcie z dysku</button>
+                    <button class="action-btn" onclick="addBolo()">Opublikuj list gończy</button>
+                </div>
+                <div id="bolos-list">Ładowanie listów gończych...</div>
+            </div>
+
+            <div id="tab-szeryf" class="tab-content">
+                <h1 style="color: #ffcc00;">Panel Szeryfa - Oczekujące Wnioski</h1>
+                <div id="pending-list">Ładowanie wniosków...</div>
+            </div>
+
+        </div>
+
+        <div class="sidebar-right">
+            <h3 style="text-align: center; color: #0066cc; margin-top: 0; margin-bottom: 5px;">MDT MENU</h3>
+            <div class="logged-info" id="logged-user-info">Zalogowano jako: Brak</div>
+            
+            <button class="tab-btn active" onclick="switchTab('taryfikator', this)">📋 Taryfikator</button>
+            <button class="tab-btn" onclick="switchTab('notatki', this)">📝 Notatki</button>
+            <button class="tab-btn" onclick="switchTab('mandaty', this)">💵 Mandaty i Wyroki</button>
+            <button class="tab-btn" onclick="switchTab('poszukiwania', this)">🚨 Poszukiwania</button>
+            
+            <button class="tab-btn" id="btn-tab-szeryf" style="display: none; border-color: #ffcc00; color: #ffcc00;" onclick="switchTab('szeryf', this)">⭐ Panel Szeryfa</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
